@@ -45,7 +45,7 @@ def quat_to_yaw(q):
 
 def angle_to_steering(angle):
     # Convert angle in radians to steering value
-    return 15*angle / np.pi
+    return 15*angle
 
 def main():
 
@@ -315,6 +315,7 @@ def main():
                 m.geom_pos[x][1] = m.geom_pos[x][1]+dy*0.001
 
             steering_value = 0
+            steering_angle = 0
             nonlocal step_counter
             car_position = d.xpos[d.model.body("robot-buddy").id]
             x = car_position[0]
@@ -332,21 +333,14 @@ def main():
                 # For a quaternion [w, x, y, z], yaw = atan2(2(wz + xy), 1 - 2(y^2 + z^2))
                 w, xc, yc, z = car_quat
                 car_direction = np.arctan2(2 * (w * z + xc * yc), 1 - 2 * (yc * yc + z * z))
-                steering_value = 15*PP_Controller.calculate_steering_angle(car_position, target_point, car_direction)
+                steering_angle = PP_Controller.calculate_steering_angle(car_position, target_point, car_direction)
             max_steering = 10
             min_steering = -10
-            if steering_value > max_steering:
-                steering_value = max_steering
-            elif steering_value < min_steering:
-                steering_value = min_steering
-            steering.ctrl = steering_value
 
             velocity.ctrl = args.velocity
             if not viewer.is_running():
                 return
 
-            mujoco.mj_step(m, d)
-            viewer.sync()
             # if(step_counter % 20 == 0):
             #     i = viewer.user_scn.ngeom
             #     mujoco.mjv_initGeom(
@@ -359,16 +353,7 @@ def main():
             #     )
             #     viewer.user_scn.ngeom += 1
             step_counter += 1
-            # with viewer.lock() as con:
-            #     mujoco.mjr_text(
-            #         con,
-            #         "Error: {:.2f}".format(error),
-            #         0.02,
-            #         0.02,
-            #         0.05,
-            #         0,
-            #         0,
-            #     )
+
             car_buddy = m.body("robot-buddy")
             car_position_raw = d.xpos[d.model.body("robot-buddy").id]
             car_pos = [car_position_raw[0], car_position_raw[1], 0.1]
@@ -389,22 +374,39 @@ def main():
             first_yaw = yaw + (shoot_range/100) * np.pi;
             ray_dirs = []
             ray_distance = (shoot_range / 100) * 2 * np.pi / (ray_count - 1)
+            angles = np.array([], dtype=np.float64)
             for i in range(0, ray_count):
                 ray_yaw = first_yaw - ray_distance * i
                 ray_dirs.append(np.cos(ray_yaw))
                 ray_dirs.append(np.sin(ray_yaw))
                 ray_dirs.append(0.0)
+                angles = np.append(angles, yaw - ray_yaw)
+
+            print("Ray angles:", angles)
+            print("Steering angle:", steering_angle)
             nray = ray_count
 
             # Prepare output arrays
             geomid = np.full(nray, -1, dtype=np.int32)         # Output: geom IDs hit by each ray
             dist = np.full(nray, -1.0, dtype=np.float64)       # Output: distances for each ray
             mujoco.mj_multiRay(m, d, ray_start, ray_dirs, None, 1, -1, geomid, dist, nray, 100)
-            print("Distances:", dist)
+            # print("Distances:", dist)
             max_distance_index = np.argmax(dist)
             max_distance = dist[max_distance_index]
             route_yaw = first_yaw - ray_distance * max_distance_index
             angle = route_yaw - yaw
+
+            steering_value = angle_to_steering(steering_angle)
+
+            if steering_value > max_steering:
+                steering_value = max_steering
+            elif steering_value < min_steering:
+                steering_value = min_steering
+            
+            steering.ctrl = steering_value
+
+            mujoco.mj_step(m, d)
+            viewer.sync()
 
   
 
