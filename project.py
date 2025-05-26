@@ -26,7 +26,11 @@ class PLANNER_TYPES:
 
 show_animation = False
 
-# Helper construsts for the viewer for pause/unpause functionality.
+shoot_range = 25.0
+ray_count = 30
+helper_geom_distance = 3  # [m]
+
+# Helper constructs for the viewer for pause/unpause functionality.
 paused = False
 
 max_reference_path_distance = 0.5  # [m]
@@ -47,13 +51,43 @@ def angle_to_steering(angle):
     # Convert angle in radians to steering value
     return 15*angle
 
+def score_angle(angle,distance,  best_angle=0, min_distance=0.1):
+
+    kd = 1.0
+    ka = 1.0
+    return kd * np.log(1 + distance - min_distance) + ka * (1 - abs(angle - best_angle) / np.pi)
+def find_best_angle(angles_and_distances, best_angle=0, min_distance=0.1, max_distance=3.0):
+    """
+    Score all angles based on the closeness to the best_angle and distance to the closest obstacle
+    formula: score: kd*ln(1 + distance - min_distance) + ka(1 - abs(angle - best_angle)/pi)
+    where distance is the distance to the closest obstacle, angle is the angle of the ray
+    """
+    kd = 1.0
+    ka = 1.0
+    scores = []
+    for angle, distance in zip(angles_and_distances[0], angles_and_distances[1]):
+        if distance < min_distance:
+            distance = min_distance
+        if distance > max_distance:
+            distance = max_distance
+        score = score_angle(angle, distance, best_angle, min_distance)
+        scores.append(score)
+
+    best_index = np.argmax(scores)
+
+    best_angle = angles_and_distances[0][best_index]
+    best_distance = angles_and_distances[1][best_index]
+    print(f"Best angle: {best_angle}, Best distance: {best_distance}, Best index: {best_index}, Score: {scores[best_index]}")
+    return best_angle, best_distance, best_index
+
+
 def main():
 
     # Uncomment to start with an empty model
     # scene_spec = mujoco.MjSpec() 
     parser = argparse.ArgumentParser()
     parser.add_argument("--controller", type=int, default=CONTROLLER_TYPES.PP)
-    parser.add_argument("--velocity", type=float, default=3)
+    parser.add_argument("--velocity", type=float, default=1)
     parser.add_argument("--planner", type=int, default=PLANNER_TYPES.PRM)
 
     args = parser.parse_args()
@@ -250,6 +284,34 @@ def main():
                 rgba=[1, 1, 1, 1],
             )
             viewer.user_scn.ngeom += 1
+        
+        #  Add helper geoms to see the possible courses
+
+        ray_geom_indexes = []
+        for i in range(ray_count):
+            geom_index = viewer.user_scn.ngeom
+            mujoco.mjv_initGeom(
+                viewer.user_scn.geoms[geom_index],
+                type=mujoco.mjtGeom.mjGEOM_SPHERE,
+                size=[0.05, 0, 0],
+                pos=np.array([0, 0, -0.005]),
+                mat=np.eye(3).flatten(),
+                rgba=[0, 0, 0, 1],
+            )
+            viewer.user_scn.ngeom += 1
+            ray_geom_indexes.append(geom_index)
+        
+        #  Add another helper geom to see the best angle course
+        best_angle_geom_index = viewer.user_scn.ngeom
+        mujoco.mjv_initGeom(
+            viewer.user_scn.geoms[best_angle_geom_index],
+            type=mujoco.mjtGeom.mjGEOM_SPHERE,
+            size=[0.05, 0, 0],
+            pos=np.array([0, 0, -0.005]),
+            mat=np.eye(3).flatten(),
+            rgba=[0, 1, 0, 1],
+        )
+        viewer.user_scn.ngeom += 1
 
         # Close the viewer automatically after 30 wall-clock-seconds.
         start = time.time()
@@ -369,8 +431,7 @@ def main():
 
             nearest_dist = mujoco.mj_ray(m, d, ray_start, ray_dir, None, 1, -1, unused)
             # Shoot range by percentage
-            shoot_range = 25.0
-            ray_count = 10
+
             first_yaw = yaw + (shoot_range/100) * np.pi;
             ray_dirs = []
             ray_distance = (shoot_range / 100) * 2 * np.pi / (ray_count - 1)
@@ -380,23 +441,55 @@ def main():
                 ray_dirs.append(np.cos(ray_yaw))
                 ray_dirs.append(np.sin(ray_yaw))
                 ray_dirs.append(0.0)
-                angles = np.append(angles, yaw - ray_yaw)
+                angles = np.append(angles, ray_yaw - yaw)
 
-            print("Ray angles:", angles)
-            print("Steering angle:", steering_angle)
-            nray = ray_count
+                # Update helper geom positions
+                geom_index = ray_geom_indexes[i]
+                viewer.user_scn.geoms[geom_index].pos = np.array([
+                    ray_start[0] + ray_dirs[-3] * helper_geom_distance,
+                    ray_start[1] + ray_dirs[-2] * helper_geom_distance,
+                    ray_start[2]
+                ])
+                viewer.user_scn.geoms[geom_index].rgba = [0, 0, 0, 1]  # Reset color to black
+
+            # Add steering angle from controller to the angles array and ray_dirs
+            angles = np.append(angles, steering_angle)
+            ray_dirs.append(np.cos(steering_angle + yaw))
+            ray_dirs.append(np.sin(steering_angle + yaw))
+            ray_dirs.append(0.0)
+
+            # Update the best angle helper geom position and color
+            viewer.user_scn.geoms[best_angle_geom_index].pos = np.array([
+                ray_start[0] + ray_dirs[-3] * helper_geom_distance,
+                ray_start[1] + ray_dirs[-2] * helper_geom_distance,
+                ray_start[2]
+            ])
+            viewer.user_scn.geoms[best_angle_geom_index].rgba = [0, 1, 0, 1]  # Reset color to green
+
+
+            # print("Ray angles:", angles)
+            # print("Steering angle:", steering_angle)
+            nray = ray_count + 1  # +1 for the steering angle ray
 
             # Prepare output arrays
             geomid = np.full(nray, -1, dtype=np.int32)         # Output: geom IDs hit by each ray
             dist = np.full(nray, -1.0, dtype=np.float64)       # Output: distances for each ray
             mujoco.mj_multiRay(m, d, ray_start, ray_dirs, None, 1, -1, geomid, dist, nray, 100)
             # print("Distances:", dist)
-            max_distance_index = np.argmax(dist)
-            max_distance = dist[max_distance_index]
-            route_yaw = first_yaw - ray_distance * max_distance_index
-            angle = route_yaw - yaw
 
-            steering_value = angle_to_steering(steering_angle)
+            angles_and_distances = np.array([angles, dist])
+            best_angle, best_distance, best_index = find_best_angle(angles_and_distances, steering_angle)
+            # print("Best angle: {}, Best distance: {}".format(best_angle, best_distance))
+
+            # Update the best angle helper geom color as red
+            if best_index < len(ray_geom_indexes):
+                viewer.user_scn.geoms[ray_geom_indexes[best_index]].rgba = [1, 0, 0, 1]
+                # decrease the velocity if the best angle is not the steering angle
+                velocity.ctrl = args.velocity * 0.5
+            else:
+                viewer.user_scn.geoms[best_angle_geom_index].rgba = [1, 0, 0, 1]
+
+            steering_value = angle_to_steering(best_angle)
 
             if steering_value > max_steering:
                 steering_value = max_steering
