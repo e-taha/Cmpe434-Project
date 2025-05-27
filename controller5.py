@@ -28,6 +28,7 @@ class PurePursuitController:
     def find_lookahead_point(self, current_pose, reference_path):
 
         # Find the closest point on the reference path first
+        isEnd = False
         distances = np.linalg.norm(reference_path - current_pose, axis=1)
         closest_index = np.argmin(distances)
         closest_point = reference_path[closest_index]
@@ -38,6 +39,7 @@ class PurePursuitController:
         while lookahead_index != closest_index:
             if lookahead_index >= len(reference_path):
                 lookahead_index -= 1
+                isEnd = True
                 break
             # Check if the lookahead point is too far away
             if distances[lookahead_index] > self.lookahead_distance:
@@ -54,7 +56,9 @@ class PurePursuitController:
             if lookahead_index >= len(reference_path):
                 lookahead_index = 0
 
-        # Calculate the intersection point of the line segment from previous point to lookahead point
+        # Calculate the intersection point of the line segment from previous point to lookahead point if it is not the end of the path
+        if isEnd:
+            return reference_path[-1], isEnd
         x1, y1 = reference_path[previous_index]
         x2, y2 = reference_path[lookahead_index]
         xc, yc = current_pose
@@ -66,7 +70,7 @@ class PurePursuitController:
         discriminant = B ** 2 - 4 * A * C
 
         if discriminant < 0:
-            return reference_path[lookahead_index]
+            return reference_path[lookahead_index], isEnd
         
         t1 = (-B + math.sqrt(discriminant)) / (2 * A)
         t2 = (-B - math.sqrt(discriminant)) / (2 * A)
@@ -75,12 +79,12 @@ class PurePursuitController:
         if t < 0 or t > 1:
             t = t2
             if t < 0 or t > 1:
-                return reference_path[lookahead_index]
+                return reference_path[lookahead_index], isEnd
             
         x = x1 + t * (x2 - x1)
         y = y1 + t * (y2 - y1)
 
-        return np.array([x, y])
+        return np.array([x, y]), isEnd
 
         
         

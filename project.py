@@ -26,10 +26,11 @@ class PLANNER_TYPES:
 
 show_animation = False
 
-shoot_range = 25.0
-ray_count = 30
+shoot_range = 15.0
+ray_count = 100
 helper_geom_distance = 3  # [m]
 
+max_scoring_distance = 3.0
 # Helper constructs for the viewer for pause/unpause functionality.
 paused = False
 
@@ -53,7 +54,7 @@ def angle_to_steering(angle):
 
 def score_angle(angle,distance,  best_angle=0, min_distance=0.1):
 
-    kd = 1.0
+    kd = 2.0
     ka = 1.0
     return kd * np.log(1 + distance - min_distance) + ka * (1 - abs(angle - best_angle) / np.pi)
 def find_best_angle(angles_and_distances, best_angle=0, min_distance=0.1, max_distance=3.0):
@@ -309,7 +310,7 @@ def main():
             size=[0.05, 0, 0],
             pos=np.array([0, 0, -0.005]),
             mat=np.eye(3).flatten(),
-            rgba=[0, 1, 0, 1],
+            rgba=[1, 0, 0, 1],
         )
         viewer.user_scn.ngeom += 1
 
@@ -382,11 +383,12 @@ def main():
             car_position = d.xpos[d.model.body("robot-buddy").id]
             x = car_position[0]
             y = car_position[1]
+            isEnd = False
             if controller_type == CONTROLLER_TYPES.PID:
                 error = get_error(x, y)
                 steering_value = PID_controller.update(error=error)
             elif controller_type == CONTROLLER_TYPES.PP:
-                target_point = PP_Controller.find_lookahead_point(np.array([x, y]), reference_path)
+                target_point, isEnd = PP_Controller.find_lookahead_point(np.array([x, y]), reference_path)
                 # Update the target geom position
                 viewer.user_scn.geoms[target_geom_index].pos = np.array([target_point[0], target_point[1], -0.005])
                 # Get car's quaternion
@@ -422,7 +424,7 @@ def main():
             yaw = quat_to_yaw(d.xquat[car_buddy.id])
             ray_dir = [np.cos(yaw), np.sin(yaw), 0]
             # print("Yaw: {}".format(yaw))
-            offset = 0.15
+            offset = 0.0
             ray_start = [
                 car_pos[0] + ray_dir[0] * offset,
                 car_pos[1] + ray_dir[1] * offset,
@@ -464,7 +466,7 @@ def main():
                 ray_start[1] + ray_dirs[-2] * helper_geom_distance,
                 ray_start[2]
             ])
-            viewer.user_scn.geoms[best_angle_geom_index].rgba = [0, 1, 0, 1]  # Reset color to green
+            viewer.user_scn.geoms[best_angle_geom_index].rgba = [1, 0, 0, 1]  # Reset color to green
 
 
             # print("Ray angles:", angles)
@@ -474,20 +476,29 @@ def main():
             # Prepare output arrays
             geomid = np.full(nray, -1, dtype=np.int32)         # Output: geom IDs hit by each ray
             dist = np.full(nray, -1.0, dtype=np.float64)       # Output: distances for each ray
-            mujoco.mj_multiRay(m, d, ray_start, ray_dirs, None, 1, -1, geomid, dist, nray, 100)
+            geomgroup = np.ones(6, dtype=np.uint8)
+            geomgroup[1] = 0  # Set group 1 (car) to 0 to exclude
+            geomgroup[2] = 0
+
+            mujoco.mj_multiRay(m, d, ray_start, ray_dirs, geomgroup, 1, -1, geomid, dist, nray, max_scoring_distance)
+
+            # replace all -1 distances with 100
+            dist[dist < 0] = max_scoring_distance
             # print("Distances:", dist)
 
             angles_and_distances = np.array([angles, dist])
-            best_angle, best_distance, best_index = find_best_angle(angles_and_distances, steering_angle)
+            best_angle, best_distance, best_index = find_best_angle(angles_and_distances, steering_angle, max_distance=(max_scoring_distance if not isEnd else 1.0))
+            if isEnd:
+                print("ISENDISENDISENDISEND")
             # print("Best angle: {}, Best distance: {}".format(best_angle, best_distance))
 
             # Update the best angle helper geom color as red
             if best_index < len(ray_geom_indexes):
-                viewer.user_scn.geoms[ray_geom_indexes[best_index]].rgba = [1, 0, 0, 1]
+                viewer.user_scn.geoms[ray_geom_indexes[best_index]].rgba = [0, 1, 0, 1]
                 # decrease the velocity if the best angle is not the steering angle
                 velocity.ctrl = args.velocity * 0.5
             else:
-                viewer.user_scn.geoms[best_angle_geom_index].rgba = [1, 0, 0, 1]
+                viewer.user_scn.geoms[best_angle_geom_index].rgba = [0, 1, 0, 1]
 
             steering_value = angle_to_steering(best_angle)
 
