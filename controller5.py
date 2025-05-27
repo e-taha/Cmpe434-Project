@@ -23,6 +23,10 @@ class PurePursuitController:
         # Calculate the steering angle
         steering_angle = math.atan(curvature * self.wheelbase)
 
+        if steering_angle is None or math.isnan(steering_angle):
+            print("Current Pose: {}, Target Pose: {}, Current Direction: {}".format(current_pose, target_pose, current_direction))
+            raise ValueError("Steering angle calculation resulted in None or NaN.")
+
         return steering_angle
     
     def find_lookahead_point(self, current_pose, reference_path):
@@ -58,7 +62,7 @@ class PurePursuitController:
 
         # Calculate the intersection point of the line segment from previous point to lookahead point if it is not the end of the path
         if isEnd:
-            return reference_path[-1], isEnd
+            return np.array([reference_path[-1][0], reference_path[-1][1]]), isEnd
         x1, y1 = reference_path[previous_index]
         x2, y2 = reference_path[lookahead_index]
         xc, yc = current_pose
@@ -70,8 +74,8 @@ class PurePursuitController:
         discriminant = B ** 2 - 4 * A * C
 
         if discriminant < 0:
-            return reference_path[lookahead_index], isEnd
-        
+            return np.array([reference_path[lookahead_index][0], reference_path[lookahead_index][1]]), isEnd
+
         t1 = (-B + math.sqrt(discriminant)) / (2 * A)
         t2 = (-B - math.sqrt(discriminant)) / (2 * A)
 
@@ -79,8 +83,8 @@ class PurePursuitController:
         if t < 0 or t > 1:
             t = t2
             if t < 0 or t > 1:
-                return reference_path[lookahead_index], isEnd
-            
+                return np.array([reference_path[lookahead_index][0], reference_path[lookahead_index][1]]), isEnd
+
         x = x1 + t * (x2 - x1)
         y = y1 + t * (y2 - y1)
 
