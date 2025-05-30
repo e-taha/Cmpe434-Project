@@ -36,6 +36,24 @@ max_scoring_distance = 3.0
 paused = False
 
 max_reference_path_distance = 0.5  # [m]
+back_min_steering = 0.4  # [rad]
+
+kd = 1.0
+ka = 1.5
+
+
+def key_callback(keycode):
+    global ka, kd
+    print(f"Key pressed: {keycode}")
+    if keycode == 265:  # Use up arrow key to increase ka
+        ka += 0.1
+    elif keycode == 264:  # Use down arrow key to decrease ka
+        ka -= 0.1
+    elif keycode == 262:  # Use right arrow key to increase kd
+        kd += 0.1
+    elif keycode == 263:  # Use left arrow key to decrease kd
+        kd -= 0.1
+    print(f"ka={ka}, kd={kd}")
 
 # Pressing SPACE key toggles the paused state.
 def mujoco_viewer_callback(keycode):
@@ -111,7 +129,7 @@ def find_best_angle(angles_and_distances, best_angle=0, min_distance=0.1, max_di
 
     best_angle = angles_and_distances[0][best_index]
     best_distance = angles_and_distances[1][best_index]
-    print(f"Best angle: {best_angle}, Best distance: {best_distance}, Best index: {best_index}, Score: {scores[best_index - distances_length//2]}")
+    # print(f"Best angle: {best_angle}, Best distance: {best_distance}, Best index: {best_index}, Score: {scores[best_index - distances_length//2]}")
     return best_angle, best_distance, best_index
 
 
@@ -296,7 +314,7 @@ def main():
         plt.show()
         return
     
-    with mujoco.viewer.launch_passive(m, d, key_callback=mujoco_viewer_callback) as viewer:
+    with mujoco.viewer.launch_passive(m, d, key_callback=key_callback) as viewer:
 
 
         viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
@@ -527,10 +545,11 @@ def main():
             angles_and_distances = np.array([angles, dist])
             best_angle, best_distance, best_index = find_best_angle(angles_and_distances, steering_angle, max_distance=(max_scoring_distance if not isEnd else 1.0))
             if isEnd:
-                print("ISENDISENDISENDISEND")
+                pass
+                # print("ISENDISENDISENDISEND")
             # print("Best angle: {}, Best distance: {}".format(best_angle, best_distance))
 
-            if best_distance < 0.4:
+            if best_distance < 0.7:
                 back_mode = True
             elif best_distance > 2:
                 back_mode = False
@@ -571,7 +590,9 @@ def main():
                     velocity.ctrl = -0.4
                 # add the supposed steering angle to the steering value
                 steering.ctrl = angle_to_steering(-steering_angle)
-                
+
+                if abs(steering.ctrl) < back_min_steering:
+                    steering.ctrl = back_min_steering if steering.ctrl > 0 else -back_min_steering
 
             mujoco.mj_step(m, d)
             viewer.sync()
