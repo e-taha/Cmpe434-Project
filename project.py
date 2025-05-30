@@ -29,8 +29,8 @@ show_animation = False
 shoot_range = 20.0
 ray_count = 280
 helper_geom_distance = 3  # [m]
-distances_length = 81
-
+distances_length = 121
+show_helper_geoms = True
 max_scoring_distance = 3.0
 # Helper constructs for the viewer for pause/unpause functionality.
 paused = False
@@ -87,13 +87,19 @@ def calculate_velocity(angle, target_angle=0, max_velocity=1.0, min_velocity=0.1
     return velocity
 
 def score_angle(angle, distances,  best_angle=0.0, min_distance=0.1):
+    global kd, ka
+    n = len(distances)
+    center = n // 2
+    sigma = n / 6  # Standard deviation; adjust for sharpness
+    x = np.arange(n)
+    weights = np.exp(-0.5 * ((x - center) / sigma) ** 2)
+    weights /= weights.sum()  # Normalize to sum to 1
 
-    kd = 1.0
-    ka = 1.5
-    distance = np.min(distances)
+    # Weighted sum of distances
+    distance = np.sum(np.log(1 + distances - min_distance) * weights)
     if distance < min_distance:
         distance = min_distance
-    response = kd * np.log(1 + distance - min_distance) + ka * (1 - abs(angle - best_angle) / np.pi)
+    response = kd * distance + ka * (1 - abs(angle - best_angle) / np.pi)
     if response is None or np.isnan(response) or np.isinf(response):
         print(f"Invalid score for angle {angle}: distance={distance}, best_angle={best_angle}, response={response}")
         response = 0.0
@@ -267,6 +273,10 @@ def main():
 
     # Remove concurrent duplicate points in the reference path
     reference_path = [reference_path[i] for i in range(len(reference_path)) if i == 0 or not np.allclose(reference_path[i], reference_path[i - 1])]
+
+    # If the last element of the reference path is not the final position, add it
+    if len(reference_path) > 0 and not np.allclose(reference_path[-1], [final_pos[0] * 2, final_pos[1] * 2]):
+        reference_path.append([final_pos[0] * 2, final_pos[1] * 2])
     # for i in range(len(reference_path)):
         # scene_spec.worldbody.add_body(
         #     pos=[reference_path[i][0], reference_path[i][1], 0],
@@ -342,30 +352,31 @@ def main():
         #  Add helper geoms to see the possible courses
 
         ray_geom_indexes = []
-        for i in range(ray_count):
-            geom_index = viewer.user_scn.ngeom
+        if show_helper_geoms:
+            for i in range(ray_count):
+                geom_index = viewer.user_scn.ngeom
+                mujoco.mjv_initGeom(
+                    viewer.user_scn.geoms[geom_index],
+                    type=mujoco.mjtGeom.mjGEOM_SPHERE,
+                    size=[0.05, 0, 0],
+                    pos=np.array([0, 0, -0.005]),
+                    mat=np.eye(3).flatten(),
+                    rgba=[0, 0, 0, 1],
+                )
+                viewer.user_scn.ngeom += 1
+                ray_geom_indexes.append(geom_index)
+            
+            #  Add another helper geom to see the best angle course
+            best_angle_geom_index = viewer.user_scn.ngeom
             mujoco.mjv_initGeom(
-                viewer.user_scn.geoms[geom_index],
+                viewer.user_scn.geoms[best_angle_geom_index],
                 type=mujoco.mjtGeom.mjGEOM_SPHERE,
                 size=[0.05, 0, 0],
                 pos=np.array([0, 0, -0.005]),
                 mat=np.eye(3).flatten(),
-                rgba=[0, 0, 0, 1],
+                rgba=[1, 0, 0, 1],
             )
             viewer.user_scn.ngeom += 1
-            ray_geom_indexes.append(geom_index)
-        
-        #  Add another helper geom to see the best angle course
-        best_angle_geom_index = viewer.user_scn.ngeom
-        mujoco.mjv_initGeom(
-            viewer.user_scn.geoms[best_angle_geom_index],
-            type=mujoco.mjtGeom.mjGEOM_SPHERE,
-            size=[0.05, 0, 0],
-            pos=np.array([0, 0, -0.005]),
-            mat=np.eye(3).flatten(),
-            rgba=[1, 0, 0, 1],
-        )
-        viewer.user_scn.ngeom += 1
 
         # Close the viewer automatically after 30 wall-clock-seconds.
         start = time.time()
@@ -500,13 +511,14 @@ def main():
                 angles = np.append(angles, ray_yaw - yaw)
 
                 # Update helper geom positions
-                geom_index = ray_geom_indexes[i]
-                viewer.user_scn.geoms[geom_index].pos = np.array([
-                    ray_start[0] + ray_dirs[-3] * helper_geom_distance,
-                    ray_start[1] + ray_dirs[-2] * helper_geom_distance,
-                    ray_start[2]
-                ])
-                viewer.user_scn.geoms[geom_index].rgba = [0, 0, 0, 1]  # Reset color to black
+                if show_helper_geoms:
+                    geom_index = ray_geom_indexes[i]
+                    viewer.user_scn.geoms[geom_index].pos = np.array([
+                        ray_start[0] + ray_dirs[-3] * helper_geom_distance,
+                        ray_start[1] + ray_dirs[-2] * helper_geom_distance,
+                        ray_start[2]
+                    ])
+                    viewer.user_scn.geoms[geom_index].rgba = [0, 0, 0, 1]  # Reset color to black
 
             # Add steering angle from controller to the angles array and ray_dirs
             # angles = np.append(angles, steering_angle)
@@ -514,13 +526,14 @@ def main():
             # ray_dirs.append(np.sin(steering_angle + yaw))
             # ray_dirs.append(0.0)
 
-            # Update the best angle helper geom position and color
-            viewer.user_scn.geoms[best_angle_geom_index].pos = np.array([
-                ray_start[0] + np.cos(steering_angle + yaw) * helper_geom_distance,
-                ray_start[1] + np.sin(steering_angle + yaw) * helper_geom_distance,
-                ray_start[2]
-            ])
-            viewer.user_scn.geoms[best_angle_geom_index].rgba = [1, 0, 0, 1]  # Reset color to red
+            if show_helper_geoms:
+                # Update the best angle helper geom position and color
+                viewer.user_scn.geoms[best_angle_geom_index].pos = np.array([
+                    ray_start[0] + np.cos(steering_angle + yaw) * helper_geom_distance,
+                    ray_start[1] + np.sin(steering_angle + yaw) * helper_geom_distance,
+                    ray_start[2]
+                ])
+                viewer.user_scn.geoms[best_angle_geom_index].rgba = [1, 0, 0, 1]  # Reset color to red
 
 
             # print("Ray angles:", angles)
@@ -555,16 +568,17 @@ def main():
                 back_mode = False
                 
 
-            # Update the best angle helper geom color as green
-            if best_index < len(ray_geom_indexes):
-                # set the distances length range geoms's color to grey
-                for i in range(best_index - distances_length//2, best_index + distances_length//2 + 1):
-                    if i < 0 or i >= len(ray_geom_indexes):
-                        continue
-                    viewer.user_scn.geoms[ray_geom_indexes[i]].rgba = [0.5, 0.5, 0.5, 1]
-                viewer.user_scn.geoms[ray_geom_indexes[best_index]].rgba = [0, 1, 0, 1]
-            else:
-                viewer.user_scn.geoms[best_angle_geom_index].rgba = [0, 1, 0, 1]
+            if show_helper_geoms:
+                # Update the best angle helper geom color as green
+                if best_index < len(ray_geom_indexes):
+                    # set the distances length range geoms's color to grey
+                    for i in range(best_index - distances_length//2, best_index + distances_length//2 + 1):
+                        if i < 0 or i >= len(ray_geom_indexes):
+                            continue
+                        viewer.user_scn.geoms[ray_geom_indexes[i]].rgba = [0.5, 0.5, 0.5, 1]
+                    viewer.user_scn.geoms[ray_geom_indexes[best_index]].rgba = [0, 1, 0, 1]
+                else:
+                    viewer.user_scn.geoms[best_angle_geom_index].rgba = [0, 1, 0, 1]
             
             
             velocity.ctrl = calculate_velocity(best_angle, steering_angle, args.velocity, 0.1, best_distance)
