@@ -16,9 +16,10 @@ Unfortunately, I use MacOs on my computer and MacOs has a habit of not supportin
 
 In my previous simulations, PRM was the only algorithm that finds the path nearly all the time, so I decided to use it again. PRM is a sampling-based algorithm that builds a roadmap of the environment by randomly sampling points and connecting them if they are reachable. In my simulations, I initially set the number of sampled points to 500, but I found that it was not enough to cover the environment adequately and sometimes (nearly %30 - 40% of the time), it could not find a path. So, I increased the number of sampled points to 5000, which significantly improved the pathfinding capability of PRM, but it was taking so much time.My KNN (k-nearest neighbors) number was set to 10 and max edge length was set to 30. I thought to change them too, but when I set the number of sampled points to 1000, it worked well enough, so I didn't change them. After generating the path, I visualized it using matplotlib to ensure that the path was generated correctly.
 
-![PRM Path](Figure_1.png)
-![PRM Path 2](Figure_2.png)
-![PRM Path 3](Figure_3.png)
+![PRM Path](https://github.com/user-attachments/assets/5006fbe5-f1b3-4f47-90c5-7da405172bd8)
+![PRM Path 2](https://github.com/user-attachments/assets/83ac87da-c05b-4682-b78d-2c55a3174822)
+![PRM Path 3](https://github.com/user-attachments/assets/b2f07362-5686-4f54-9e80-decf86a78416)
+
 
 # Path Tracking with Pure Pursuit
 
@@ -220,5 +221,13 @@ As much as I wanted to avoid for having states for the drive become much smoothe
 
 To be fair, most of the time on this project was spent on finding the best parameters and the best scoring function and the speed calculation. I tried many different approaches and finally found a combination that works well for my simulation. There are still cases when a path cannot be found, or the car hits the obstacles or the wall, or the car is lost the path. But those cases become edge cases instead of the main cases. In the future, different algorithms and parameters can be tested or current algorithms can be written in a more efficient way such as writing in C++ since it is much faster than Python.
 
-![Simulation Video](vid1.mov)
-![Simulation Video2](vid2.mov)
+
+https://github.com/user-attachments/assets/1541cdf8-8772-4321-bfa7-14b882cbbe1a
+
+
+
+
+https://github.com/user-attachments/assets/0fdc5453-ad7e-4640-94de-418f648c0677
+
+
+
