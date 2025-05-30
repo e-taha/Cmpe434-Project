@@ -1,4 +1,8 @@
-(Introductory part for the autonomous driving)
+# Autonomous Driving Simulation with Mujoco
+
+This project is an autonomous driving simulation using Mujoco, a physics engine for robotics and biomechanics. The goal of this simulation is to test the autonomous driving capabilities of a car in a labyrinth-like environment with obstacles. The car will use various algorithms for path planning, path tracking, and obstacle avoidance to navigate through the environment.
+
+# Overview
 
 In this project, we are going to create a simulation where we can test the autonomous driving capabilities of a car. The main scenario we will focus on is this: A car tries to reach a goal point from a starting point while avoiding obstacles inside an environment of labyrinth-like connected rooms. The car will be able to sense its environment and make decisions based on the information it receives.
 
@@ -19,7 +23,6 @@ In my previous simulations, PRM was the only algorithm that finds the path nearl
 ![PRM Path](https://github.com/user-attachments/assets/5006fbe5-f1b3-4f47-90c5-7da405172bd8)
 ![PRM Path 2](https://github.com/user-attachments/assets/83ac87da-c05b-4682-b78d-2c55a3174822)
 ![PRM Path 3](https://github.com/user-attachments/assets/b2f07362-5686-4f54-9e80-decf86a78416)
-
 
 # Path Tracking with Pure Pursuit
 
@@ -221,13 +224,6 @@ As much as I wanted to avoid for having states for the drive become much smoothe
 
 To be fair, most of the time on this project was spent on finding the best parameters and the best scoring function and the speed calculation. I tried many different approaches and finally found a combination that works well for my simulation. There are still cases when a path cannot be found, or the car hits the obstacles or the wall, or the car is lost the path. But those cases become edge cases instead of the main cases. In the future, different algorithms and parameters can be tested or current algorithms can be written in a more efficient way such as writing in C++ since it is much faster than Python.
 
-
 https://github.com/user-attachments/assets/1541cdf8-8772-4321-bfa7-14b882cbbe1a
 
-
-
-
 https://github.com/user-attachments/assets/0fdc5453-ad7e-4640-94de-418f648c0677
-
-
-
